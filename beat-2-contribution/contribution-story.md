@@ -11,7 +11,7 @@ files and no evidence uploads are part of Assignment 5.
 **Student:** Giovanni Govert
 **GitHub Username:** ggovert
 **Issue:** https://github.com/ecmwf/WeatherGenerator/issues/2985
-**Pull Request:** [GitHub PR link, once opened]
+**Pull Request:** https://github.com/ecmwf/WeatherGenerator/pull/3049
 
 One repository, built across units 5 to 8, telling the whole story of your real
 contribution. Fill it as you work, not at the end — the sections below ask for evidence that
@@ -60,12 +60,11 @@ I built issue-scout from my unit 1 skill: I wrote a six-sentence fit profile, a 
 
 **Unit 6: a voice-guard hook with upstream rules, and a local memory file for the repo**
 
-I installed the voice guard as a hook in my global Claude Code settings, added four upstream rules to my voice guide (claims, questions, pings), and wrote a 26-line `CLAUDE.local.md` for my fork of ecmwf/WeatherGenerator. The shipped hook calls `python3`, which on my laptop is the Microsoft Store stub, so it would have failed silently and protected nothing; I pointed it at my real Python path instead, and I used pointer files for the shared voice guide because symlinks do not work reliably on Windows. The wiring test passed (the guard stopped `gh issue comment --help`), and it passed my claim draft by hand-run check, but I have not yet seen it stop a real draft, and I posted the claim from the browser, where the guard cannot see it. My first version of the memory file also came out wrong, because my shell quoting stripped every command in backticks; I caught it by reading the file back and rewrote it.
+I installed the voice guard as a hook in my global Claude Code settings, added four upstream rules to my voice guide (claims, questions, pings), and wrote a 26-line `CLAUDE.local.md` for my fork of ecmwf/WeatherGenerator. The shipped hook calls `python3`, which on my laptop is the Microsoft Store stub, so it would have failed silently and protected nothing; I pointed it at my real Python path instead, and I used pointer files for the shared voice guide because symlinks do not work reliably on Windows. The wiring test passed (the guard stopped `gh issue comment --help`), it passed my claim draft in a hand-run check, and it passed the claim again when I posted it through Claude Code (the guard log shows a hook pass at 03:56), but so far it has only stopped the body-less wiring test, so I have not yet seen it stop a real draft. My first version of the memory file also came out wrong, because my shell quoting stripped every command in backticks; I caught it by reading the file back and rewrote it.
 
-**Unit 7: [one line on the tool work]**
+**Unit 7: a ship-gate whose manifest runs the project's checks through WSL**
 
-[2-4 sentences: the ship-gate and your gate manifest. What it produced
-on your real branch, what fought you, what changed because of it.]
+I installed the ship-gate and wrote a four-row manifest (ruff format check, ruff check, `pytest src/`, and my new test file), each row calling into WSL because the project only supports Linux. Two things fought me: `python3` is the Microsoft Store stub on my laptop, so I patched the hook command, and the gate runs its rows from Windows `cmd.exe`, which silently falls back to `C:\Windows` when the clone is inside WSL; I found that with a small test script before relying on the install and recloned my fork on the Windows side, keeping only the Python environments in WSL. On my real branch the gate passed twice (all 4 repo checks and all 6 pr-precheck checks); its notes made me reword one sentence and say in the PR that pylint and the type check were not run, and the PR then opened through it. The integration tests are in the manifest's excluded table with a dated reason, because they need a GPU build I cannot install.
 
 **Unit 8: [one line on the tool work]**
 
@@ -97,26 +96,26 @@ My claim comment: https://github.com/ecmwf/WeatherGenerator/issues/2985#issuecom
 
 **Problem Description**
 
-[In your own words, what is broken or missing?]
+When someone asks WeatherGenerator's evaluation tool to plot a timeseries for only one forecast step, the program crashes instead of producing a plot or a clear message. A timeseries needs several points over time, and the plotting code assumes it always gets a list of dates.
 
 **Expected Behavior**
 
-[What should happen?]
+The program should not crash. The maintainer who opened the issue asks for it to "fail gently with a warning saying that there are not enough fsteps specified", so the user learns what happened.
 
 **Current Behavior**
 
-[What actually happens?]
+The plot raises `TypeError: object of type 'numpy.datetime64' has no len()` at `timeseries.py` line 97, and the evaluation run stops. I reproduced the same error on `develop` with small synthetic data: two forecast steps save a plot, and one step crashes.
 
 **Affected Components**
 
-[Which parts of the codebase are involved?]
+`packages/evaluate/src/weathergen/evaluate/plotting/timeseries.py`: `Timeseries.get_preds_tars_per_region_sample_channel` (where one step leaves `valid_time` as a single value) and `Timeseries.plot_single_timeseries` (where `len(valid_times)` fails). It is called from `_dispatch_timeseries_plots` in `plot_orchestration.py` and run through `dispatch_parallel` in `io/data/io_orchestration.py`.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: my `CLAUDE.local.md` repo memory file, plus `gh` to read the issue thread and the repo's files.
+- What it produced: a fast route to the three files that matter, and the exact commands for lint and tests, so I did not have to rediscover them in every session.
+- Difficulties: the memory file said tests live in the root `tests/` folder, which was only half true: the repo keeps unit tests next to the code as `*_test.py` files, and CI's `pytest src/` does not look inside `packages/`.
+- What changed: I corrected my understanding while building the test; I have not yet updated the memory file.
 
 ---
 
@@ -193,93 +192,84 @@ A second, xarray-only script (`repro_concat.py`) copies the `.sel`/`.mean`/`.con
 
 **Analysis**
 
-[Your analysis of the root cause: what is causing the issue, traced
-to the files and functions involved.]
+With one forecast step, `get_preds_tars_per_region_sample_channel` joins the per-step series with `xr.concat(..., coords="different")`. With only one input there is nothing "different" to stack, so the `valid_time` coordinate stays a single value instead of a 1-element array. `plot_single_timeseries` then reads `valid_times = da_tars_ts.valid_time.values`, a 0-dimensional array, and line 97 calls `len(valid_times)` to choose the date tick spacing, which raises the `TypeError`. With two or more steps `valid_time` is 1-D and the same code works. I confirmed this on `develop` at `3508fa98` with a script that calls the real `plot_single_timeseries` (2 steps saves a plot, 1 step crashes) and with a separate xarray-only script that shows `valid_time` has shape `()` for one step and `(2,)` for two.
 
 **Proposed Solution**
 
-[High-level description of your fix approach, and what you are
-deliberately NOT changing.]
+Change only `plot_single_timeseries`: wrap `valid_times` with `np.atleast_1d`, and when there is only one forecast step, log a warning through the module's logger and still draw the point with a marker (a line through one point is invisible). That is the same pattern `bar_plots.py` already uses when it has fewer than two runs: warn, then continue. Add a `timeseries_test.py` next to the module with two tests. I am deliberately not changing the `xr.concat` call, the zero-step case (I ran it: `get_preds_tars_per_region_sample_channel` raises `ValueError: must supply at least one object to concatenate` at line 63, before the plot code runs, so it is a separate problem), the parallel-dispatch fallback, or any other plot. The issue says to "fail gently with a warning"; I chose warn-and-draw and asked the maintainer in my claim comment whether they prefer skipping the plot, so I will follow their answer if one comes. Risks I wrote down: the maintainer may want a different approach, I only used synthetic data (no ensembles, several channels or other regions), and CI may not collect my test.
 
 **Implementation Plan**
 
-1. [Modify file X to do Y]
-2. [Add or change Z]
-3. [Update tests]
+1. In `timeseries.py`, add `import logging`, `import numpy as np`, and the module `_logger`.
+2. In `plot_single_timeseries`, wrap `valid_times` with `np.atleast_1d`, add the single-step warning, and pass a `marker` to both `ax.plot` calls.
+3. Add `timeseries_test.py` with a one-step test (it must fail before the fix) and a two-step test.
+4. Run the check-only lint, the project's unit tests and my new test, then re-run the reproduction for before and after evidence, and open the PR against `develop` with `Closes #2985`.
 
-[Record deviations here as they happen: what changed mid-build and
-why. A recorded deviation is honest work; silent drift is not.]
+Deviations: I first expected the repo's tests to live in the root `tests/` folder, but it keeps them next to the code as `*_test.py` files, so I put mine beside `timeseries.py`. CI's `pytest src/` does not collect anything under `packages/`, so I run my test file directly and say so in the PR. After an LLM review of my diff, I also changed the single-step condition from `< 2` to `== 1`, because the warning would have said "one forecast step" for zero points too.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: plan-check, using its real-repo scope from unit 6, on `plan.md` and a short `plan-comment.md` that I did not post.
+- What it produced: an accept verdict with all seven checks passing, plus a list of things to fix. The useful catches were a claim I had stated as fact without checking (that the zero-step case fails somewhere else), a plan with no risks or deviations sections, a stale tense in the comment, and a pronoun I had assumed for the maintainer.
+- Difficulties: the tool's own procedure and rubric disagree on the `unknowns-honest` check: the procedure would fail a plan with confident claims and no risks section, while the rubric passed mine, so I had to follow the rubric's verdict and still act on the procedure's concern.
+- What changed: I ran the zero-step case (it raises `ValueError: must supply at least one object to concatenate` at line 63, which confirmed the claim), added "Risks and unknowns" and "Deviations" sections, switched to "the maintainer", and gave the plan comment the output line and the AI-use line.
 
 ---
 
 ## Testing Strategy
 
-[What observable checks prove the fix: your reproduction steps re-run
-against the built change (before and after), and the repo's own test
-suite or checks with the outcome shown. "Tests pass" with nothing
-observable named is not a strategy.]
+1. **Reproduction, before and after.** The same script (calls the real `Timeseries.plot_single_timeseries` on small synthetic data) crashed with `TypeError: object of type 'numpy.datetime64' has no len()` before the fix. After the fix it prints `OK` for both 2 steps and 1 step, plus the new warning, and saves two charts. I opened the one-step chart and the point is visible (this was my main worry, because a line through one point draws nothing).
+2. **A test that fails without the fix.** `timeseries_test.py` has a one-step test (a plot file exists, is not empty, and the warning was logged) and a two-step test (a plot file exists and no warning is logged). On the unfixed code the one-step test failed with the exact `TypeError` (1 failed, 1 passed); after the fix both pass (2 passed).
+3. **The repo's own checks.** `ruff format --check` and `ruff check` (ruff 0.12.2, as the project pins) pass on `src/ scripts/ packages/`, and the project's unit tests (`pytest src/`, in an environment with the torch CPU extra) pass, 3 tests. I did not run the integration tests (they need a GPU build and do not touch this plot), the experimental type check, or pylint.
+
+What this does not prove: I used synthetic data, not the project's forecast files, and I did not test ensembles, several channels or other regions.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: the ship manifest, run by the ship-gate, plus ruff and pytest in WSL.
+- What it produced: four green checks (format check, lint, `pytest src/` with 3 passed, and my test file with 2 passed) that the gate ran on its own before the PR, and a dated excluded table for the checks I could not run.
+- Difficulties: `pytest src/` first failed with `ModuleNotFoundError: No module named 'torch'`, because my evaluate-only environment lacks the root package's torch CPU extra, so I built a second environment (with `--frozen`, so the lockfile stayed untouched) just for that row.
+- What changed: I pointed the unit-test row at the second environment, and listed integration tests, the type check and pylint as excluded, each with a reason I had checked.
 
 ---
 
 ## Implementation Notes
 
-[A running log, added to as you work. Date each entry. What you
-built, decisions you made when you made them, wrong turns included.]
+**2026-11-07**
 
-**[Date]**
+Installed the project's evaluate package in WSL (a large download, because it pulled in torch) and wrote a script that calls the real `plot_single_timeseries` on small synthetic data. It reproduced the issue's `TypeError`. I decided to use synthetic data, because the issue's real data lives on an ECMWF machine.
 
-[Entry]
+**2026-11-10**
 
-**[Date]**
-
-[Entry]
+Posted my claim on the issue at 03:56. In the evening I found that the ship-gate cannot work with a clone inside WSL (Windows `cmd.exe` falls back to `C:\Windows` for those paths), so I recloned my fork on the Windows side and rebuilt the Python environment in WSL. I wrote the test first and watched it fail on the unfixed code (1 failed, 1 passed), then made the fix, and ruff flagged two style problems in my own test file, which I fixed. A separate Claude session reviewed the diff and I changed `< 2` to `== 1`; plan-check made me actually run the zero-step case instead of asserting it. The ship-gate passed, I pushed the branch to my fork, and PR #3049 opened at 22:21. Wrong turns: my first run of the project's unit tests failed for lack of torch, and I had assumed the repo's tests live in a root `tests/` folder when they sit next to the code.
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: Claude Code with my `CLAUDE.local.md` repo memory, working through the manifest's commands, ruff and pytest.
+- What it produced: the fix, the test, the plan files and the PR text, with each step checked by a command instead of by my say-so.
+- Difficulties: moving between Windows and WSL shells broke my quoting several times, and one of those errors stripped the commands out of my memory file. The Windows and Linux split also forced the reclone.
+- What changed: I put commands in small script files instead of long one-liners, read files back after writing them, and kept the code on the Windows side with the environments in WSL.
 
 ---
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when opened]
+**PR Link:** https://github.com/ecmwf/WeatherGenerator/pull/3049
 
-**PR Description:** [what the PR says; much of the content above
-adapts into it]
+**PR Description:** "[2985][eval] Plot a single point with a warning for one forecast step", 2 files changed (+75 / -3), closes #2985. It explains the cause (one forecast step leaves `valid_time` as a scalar, so `len(valid_times)` fails), the fix (`np.atleast_1d`, a warning, and a marker so the single point is visible), the new test, the before and after output, the checklist from the repo's template with every item answered, what I could not run (integration tests, pylint, the type check), a note that CI's `pytest src/` does not collect tests under `packages/`, and an AI-assistance section. The full text is in the PR.
 
 **Maintainer Feedback:**
 
-- [Date]: [feedback received, or "none yet"; silence is a normal
-  state and costs you nothing]
-- [Date]: [how you addressed it]
+- 2026-11-10: none yet. The one automatic check that has run passed, and my claim comment on the issue is still unanswered.
 
-**Status:** [Awaiting review / Iterating / Merged / Closed. The
-status is a fact you record, never a grade: the PR is graded as
-opened.]
+**Status:** Awaiting review
 
 **Toolkit**
 
-- Tool:
-- What it produced:
-- Difficulties:
-- What changed:
+- Tool: the ship-gate hook with my pr-precheck, and my voice guard, which both checked the PR before it opened.
+- What it produced: a PASS every time it ran (4 of 4 repo checks and 6 of 6 pr-precheck checks), a voice guard pass logged at 22:21, and a PR whose body is character for character the file I had checked.
+- Difficulties: my first attempt at the command failed because the `--allowedTools` flag swallowed the prompt (a flag-order mistake), and the gate's pass goes stale when anything changes, so I re-ran it after editing the PR text.
+- What changed: I put the prompt before the flag, and re-ran the gate right before opening, which also led me to add a line about pylint and the type check not being run.
 
 ---
 
