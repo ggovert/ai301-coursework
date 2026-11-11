@@ -66,10 +66,9 @@ I installed the voice guard as a hook in my global Claude Code settings, added f
 
 I installed the ship-gate and wrote a four-row manifest (ruff format check, ruff check, `pytest src/`, and my new test file), each row calling into WSL because the project only supports Linux. Two things fought me: `python3` is the Microsoft Store stub on my laptop, so I patched the hook command, and the gate runs its rows from Windows `cmd.exe`, which silently falls back to `C:\Windows` when the clone is inside WSL; I found that with a small test script before relying on the install and recloned my fork on the Windows side, keeping only the Python environments in WSL. On my real branch the gate passed twice (all 4 repo checks and all 6 pr-precheck checks); its notes made me reword one sentence and say in the PR that pylint and the type check were not run, and the PR then opened through it. The integration tests are in the manifest's excluded table with a dated reason, because they need a GPU build I cannot install.
 
-**Unit 8: [one line on the tool work]**
+**Unit 8: a PR monitor with a playbook built from this repo's real wait times**
 
-[2-4 sentences: the PR-monitor and your playbook. What it read, what it
-drafted, what you did with the draft.]
+I installed the PR monitor and wrote my four-section playbook, and for the staleness threshold I measured the repo instead of guessing: among 11 PRs from authors with no prior relationship only 1 got a maintainer reply (after 0.3 days), `CONTRIBUTING.md` states no wait, so I chose 14 days of quiet before one nudge and 30 more days before I would close my own PR. The monitor read PR #3049 (checks passing, review required, no comments) and drafted "No nudge yet" with the date the 14 days run out (2026-11-25), which was the right move for a PR that is under a day old; it did not draft a reply, because no maintainer has answered, so I cannot yet say how it handles real feedback. Along the way my first wait-time script was wrong twice (the `gh pr list` command has no author-association field, and GitHub labels some team members "CONTRIBUTOR", which made them look like outsiders), so I switched to the REST API and filtered to authors with no relationship, and the sample is still small and may undercount replies. The monitor also wrote a cosmetic encoding glitch ("nudgeâ€¦") into its draft, which I noted and did not need to fix.
 
 ---
 
@@ -277,25 +276,23 @@ Posted my claim on the issue at 03:56. In the evening I found that the ship-gate
 
 **Technical Skills Gained**
 
-[What you learned technically, named concretely.]
+The biggest lesson was that a first open source contribution works best as a collaboration with AI. I used an AI skill (my scout and its rubric) to choose an issue I could actually finish, and it came with guardrails that kept me from picking a bad one: the repo must not be archived, a maintainer must have committed recently, nobody may already be on the issue, and the repo must not ban AI-assisted work. Those checks only helped because I confirmed each one myself with `gh` instead of trusting the tool's word, which is how I caught the scout's wrong "no CONTRIBUTING file" answers. Then I worked with Claude to reproduce the bug, write the fix and a test, and open the PR, while I reviewed every step.
+
+I learned how xarray handles a coordinate when you join only one array (`xr.concat(..., coords="different")` leaves it as a scalar, so `len()` fails), why matplotlib draws nothing for a line through one point unless you give it a marker, and how to write a test that fails before a fix and passes after it. I also learned the fork workflow end to end: `origin` and `upstream` remotes, pushing a branch to my fork, and `gh repo set-default` so the PR lands on the original repo. On the tooling side, I learned to check a repository's health with `gh api` (recent commits, who merges PRs, linked PRs) instead of trusting a label.
 
 **Challenges Overcome**
 
-[What was hard and how you solved it; point at the real events, the
-Toolkit blocks above are full of them.]
+The hardest part was environment, not code. The project only supports Linux, my tools run on Windows, and the ship-gate silently fell back to `C:\Windows` when my clone was inside WSL, so I tested that with a small script, recloned my fork on the Windows side, and kept the Python environments in WSL. I also had to catch my own and my tools' mistakes by checking facts: my shell quoting stripped every command from my memory file, the scout twice said a repo had no CONTRIBUTING file when it did, `repro-check` said my posted claim differed from my draft when it did not, and I had wrongly assumed my claim was posted from the browser until the guard log showed otherwise. In each case I fixed it by reading the real file, comment or log back, and I wrote the correction into the Toolkit blocks.
 
 **What I'd Do Differently Next Time**
 
-[Reflection on your process.]
+I would check the platform before choosing an issue: a Linux-only project cost me most of a day on setup that a quick look at its install notes would have flagged. I would also test a tool on a real case earlier, because two tools I trusted at first (the scout and repro-check) each gave a wrong answer on a real repo, and I would fetch live state (a comment, a file, a log) before acting on what a tool or I remembered. Finally, I would start the contribution earlier: I finished most of units 6 to 8 after the stated deadline, which left no time to wait for the maintainer's answer before writing this story.
 
 ---
 
 ## Resources Used
 
-[What actually helped, not a reading list. List things this story
-already shows you using: the doc you followed to set the environment
-up, the thread that explained the bug, the person who answered you.
-One real entry beats ten plausible ones.]
-
-- [Link to documentation that helped]
-- [Discussion, issue, or post that helped]
+- [ecmwf/WeatherGenerator issue #2985](https://github.com/ecmwf/WeatherGenerator/issues/2985): the maintainer's traceback and diagnosis pointed me to `len(valid_times)` and the `xr.concat` call, so I did not have to hunt for the cause.
+- The repo's `CONTRIBUTING.md` and `.github/pull_request_template.md`: they told me to open a PR against `develop`, what the checklist wants, and the lint and test commands (`scripts/actions.sh`).
+- `bar_plots.py` in the same package: its "Less than two runs provided" warning, which continues instead of skipping, was the precedent for my warn-and-draw choice.
+- The unit 6, 7 and 8 `INSTALL.md` files (voice guard, ship-gate, PR monitor): I followed them for setup, and their "what stops it" sections explained the stops I hit.
