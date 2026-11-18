@@ -99,7 +99,7 @@ When someone asks WeatherGenerator's evaluation tool to plot a timeseries for on
 
 **Expected Behavior**
 
-The program should not crash. The maintainer who opened the issue asks for it to "fail gently with a warning saying that there are not enough fsteps specified", so the user learns what happened.
+The program should not crash. The person who opened the issue (a project contributor) asks for it to "fail gently with a warning saying that there are not enough fsteps specified", so the user learns what happened.
 
 **Current Behavior**
 
@@ -260,8 +260,9 @@ Posted my claim on the issue at 03:56. In the evening I found that the ship-gate
 **Maintainer Feedback:**
 
 - 2026-11-10: none yet. The one automatic check that has run passed, and my claim comment on the issue is still unanswered.
+- 2026-11-12: a maintainer (clessig) closed the PR without merging and without leaving a comment, so I have no stated reason. The maintainer closed four other outside PRs the same way on 2026-11-07 (#3028, #3030, #3032, #3035). The issue is still open and my claim comment is still unanswered.
 
-**Status:** Awaiting review
+**Status:** Closed (not merged)
 
 **Toolkit**
 
